@@ -12,36 +12,22 @@
 #include "esp_system.h"
 #include "esp_spi_flash.h"
 #include "driver/gpio.h"
+#include "hx711.h"
 
 #define LED_PIN (GPIO_NUM_2)
-#define EXTERNAL_LED_PIN (GPIO_NUM_18)
-
-static uint32_t blink = 0;
 
 static void ledBlinkTask(void* arg)
 {
-    printf("Configure gpio pin\n");
-
     gpio_set_direction(LED_PIN, GPIO_MODE_OUTPUT);
     gpio_pulldown_dis(LED_PIN);
     gpio_pullup_dis(LED_PIN);
     gpio_intr_disable(LED_PIN);
 
-    gpio_config_t config;
-    config.pin_bit_mask = GPIO_SEL_18;
-    config.intr_type = GPIO_INTR_DISABLE;
-    config.mode = GPIO_MODE_OUTPUT;
-    config.pull_down_en = GPIO_PULLDOWN_DISABLE;
-    config.pull_up_en = GPIO_PULLUP_ENABLE;
-    gpio_config(&config);
-
-    printf("Gpio pin Configured\n");
-
-
+    static uint32_t blink = 0;
     for (;;) {
         blink ^= 0x01;
+        printf("Blink!\n");
         gpio_set_level(LED_PIN, blink);
-        gpio_set_level(EXTERNAL_LED_PIN, blink ^ 0x01);
         vTaskDelay(500 / portTICK_PERIOD_MS);
     }
 }
@@ -49,10 +35,10 @@ static void ledBlinkTask(void* arg)
 
 void app_main()
 {
-    printf("Hello world!\n");
+    printf("Started!\n");
 
     //start led blink task
-    xTaskCreate(ledBlinkTask, "ledBlinkTask", 2048, NULL, 10, NULL);
+    xTaskCreate(ledBlinkTask, "ledBlinkTask", 2048, NULL, tskIDLE_PRIORITY + 1, NULL);
     /* Print chip information */
     esp_chip_info_t chip_info;
     esp_chip_info(&chip_info);
@@ -68,6 +54,6 @@ void app_main()
 
     while(1) {
         printf("main task delay...\n");
-        vTaskDelay(1200 / portTICK_PERIOD_MS);
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
 }

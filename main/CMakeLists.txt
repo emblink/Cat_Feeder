@@ -1,4 +1,4 @@
-set(COMPONENT_SRCS "cat_feeder_project.c")
+set(COMPONENT_SRCS "main.c hx711.c")
 set(COMPONENT_ADD_INCLUDEDIRS "")
 
 register_component()
