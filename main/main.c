@@ -32,7 +32,6 @@ static void ledBlinkTask(void* arg)
     }
 }
 
-
 void app_main()
 {
     printf("Started!\n");
