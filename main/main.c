@@ -13,11 +13,11 @@
 #include "esp_spi_flash.h"
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
+#include <esp32/rom/ets_sys.h>
 #include "hx711.h"
-#include <rom/ets_sys.h>
 
 #define LED_PIN (GPIO_NUM_2)
-#define HX711_DATA_SIZE 32
+#define HX711_DATA_SIZE 120
 
 static uint32_t hx711Data[HX711_DATA_SIZE] = {0};
 
@@ -27,11 +27,11 @@ static void ledBlinkTask(void *arg)
     gpio_pulldown_dis(LED_PIN);
     gpio_pullup_dis(LED_PIN);
     gpio_intr_disable(LED_PIN);
-    static uint32_t blink = 0;
     for (;;) {
-        blink ^= 0x01;
-        gpio_set_level(LED_PIN, blink);
-        vTaskDelay(500);
+        gpio_set_level(LED_PIN, true);
+        vTaskDelay(5);
+        gpio_set_level(LED_PIN, false);
+        vTaskDelay(995);
     }
 }
 
@@ -59,22 +59,22 @@ static void weightTask(void *arg)
     };
 
     hx711Init(&handle);
-    static bool dataReady = false;
 
     for (;;) {
         static uint32_t index = 0;
-        if (hx711GetStatus()) {
-            hx711ReadChannel(Hx711ChannelA64, &hx711Data[index++]);
+        if (hx711GetStatus() == Hx711StatusReady) {
+            if (hx711ReadChannel(Hx711ChannelA64, &hx711Data[index]) == Hx711StatusOk)
+                index++;
         }
         if (index >= HX711_DATA_SIZE) {
-            index = 0;
             uint64_t mean = 0;
             for (uint32_t i = 0; i < HX711_DATA_SIZE; i++)
                 mean += hx711Data[i];
-            mean /= 100;
+            mean /= index;
+            index = 0;
             printf("HX711 data == %lli\n", mean);
         }
-        vTaskDelay(90);
+        vTaskDelay(12);
     }
 }
 
