@@ -40,21 +40,22 @@ Hx711Status hx711ReadChannel(Hx711Channel channel, uint32_t *data)
 
     *data = 0;
     for (uint32_t i = 0; i < 24; i++) {
+        *data <<= 1;
     	handle->writeCb(handle->sclkPin, true);
         handle->delayCb(1);
+        handle->writeCb(handle->sclkPin, false);
         if (handle->readCb(handle->dataPin)) {
             (*data)++;
         }
-        *data <<= 1;
-        handle->writeCb(handle->sclkPin, false);
         handle->delayCb(1);
     }
-    *data &= 0xFFFFFF;
+    *data ^= 0x800000;
 
     for (uint32_t i = 0; i < channel - 24; i++) {
         handle->writeCb(handle->sclkPin, true);
         handle->delayCb(1);
         handle->writeCb(handle->sclkPin, false);
+        handle->delayCb(1);
     }
 
     return *data > 0 ? Hx711StatusOk : Hx711StatusPowerErr;
