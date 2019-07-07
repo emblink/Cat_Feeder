@@ -15,39 +15,38 @@
 #include "driver/i2c.h"
 #include <esp32/rom/ets_sys.h>
 #include "hx711.h"
-#include "oled.h"
+#include "ssd1306.h"
 
 #define LED_PIN (GPIO_NUM_2)
-#define HX711_DATA_SIZE 120
+#define HX711_MEASURMENTS_COUNT 120
 
-static uint32_t hx711Data[HX711_DATA_SIZE] = {0};
+#define I2C_MASTER_FREQ_HZ 400000U
+#define I2C_PORT_NUM I2C_NUM_0
 
 static esp_err_t i2c_master_init()
-{
-    int i2c_master_port = I2C_MASTER_NUM;
+{   
     i2c_config_t conf;
     conf.mode = I2C_MODE_MASTER;
-    conf.sda_io_num = I2C_MASTER_SDA_IO;
+    conf.sda_io_num = GPIO_NUM_21;
     conf.sda_pullup_en = GPIO_PULLUP_ENABLE;
-    conf.scl_io_num = I2C_MASTER_SCL_IO;
+    conf.scl_io_num = GPIO_NUM_22;
     conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
     conf.master.clk_speed = I2C_MASTER_FREQ_HZ;
-    i2c_param_config(i2c_master_port, &conf);
-    return i2c_driver_install(i2c_master_port, conf.mode,
-                              I2C_MASTER_RX_BUF_DISABLE,
-                              I2C_MASTER_TX_BUF_DISABLE, 0);
+    i2c_param_config(I2C_PORT_NUM, &conf);
+    return i2c_driver_install(I2C_PORT_NUM, conf.mode, 0, 0, 0);
 }
 
-static esp_err_t i2c_master_write_slave(i2c_port_t i2c_num, uint8_t *data_wr, size_t size)
+static esp_err_t i2c_master_write_slave(uint8_t address, const uint8_t *data_wr, size_t size)
 {
+    #define ACK_CHECK_EN 0x1 /*!< I2C master will check ack from slave*/
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
     i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, (OLED_I2C_ADDR << 1) | WRITE_BIT, ACK_CHECK_EN);
+    i2c_master_write_byte(cmd, (address << 1) | I2C_MASTER_WRITE, ACK_CHECK_EN);
     i2c_master_write(cmd, data_wr, size, ACK_CHECK_EN);
     i2c_master_stop(cmd);
-    esp_err_t ret = i2c_master_cmd_begin(i2c_num, cmd, 1000 / portTICK_RATE_MS);
+    esp_err_t ret = i2c_master_cmd_begin(I2C_NUM_0, cmd, 1000);
     i2c_cmd_link_delete(cmd);
-    return ret;
+    return ret == ESP_OK;
 }
 
 static void ledBlinkTask(void *arg)
@@ -56,7 +55,8 @@ static void ledBlinkTask(void *arg)
     gpio_pulldown_dis(LED_PIN);
     gpio_pullup_dis(LED_PIN);
     gpio_intr_disable(LED_PIN);
-    for (;;) {
+    for (;;) 
+    {
         gpio_set_level(LED_PIN, true);
         vTaskDelay(5);
         gpio_set_level(LED_PIN, false);
@@ -89,23 +89,34 @@ static void weightTask(void *arg)
 
     hx711Init(&handle);
 
-    //OLED_Init();
-    OLED_FillScreen(White);
-    OLED_UpdateScreen();
+    esp_err_t err = i2c_master_init();
+    printf("i2c init satus == %d\n", err == ESP_OK ? 1 : 0);
 
-    for (;;) {
+    bool status = SSD1306_Init();
+    printf("OLED INIT status == %d\n", status ? 1 : 0);
+
+    SSD1306_Puts("Hello!", &Font_7x10, SSD1306_COLOR_WHITE);
+    SSD1306_UpdateScreen();
+
+    for (;;) 
+    {
         static uint32_t index = 0;
+        static uint64_t mean = 0;
         if (hx711GetStatus() == Hx711StatusReady) {
-            if (hx711ReadChannel(Hx711ChannelA64, &hx711Data[index]) == Hx711StatusOk)
+            uint32_t data = 0;;
+            if (hx711ReadChannel(Hx711ChannelA128, &data) == Hx711StatusOk) {
                 index++;
-        }
-        if (index >= HX711_DATA_SIZE) {
-            uint64_t mean = 0;
-            for (uint32_t i = 0; i < HX711_DATA_SIZE; i++)
-                mean += hx711Data[i];
-            mean /= index;
-            index = 0;
-            printf("HX711 data == %lli\n", mean);
+                mean += data;
+            }
+            if (index >= HX711_MEASURMENTS_COUNT) {
+                mean /= index;
+                printf("HX711 data == %lli\n", mean);
+                //SSD1306_Fill(SSD1306_COLOR_BLACK);
+                SSD1306_GotoXY(0, 0);
+                SSD1306_Printf(&Font_7x10, "%d", mean);
+                SSD1306_UpdateScreen();
+                index = 0;
+            }
         }
         vTaskDelay(12);
     }
