@@ -18,7 +18,7 @@
 #include "ssd1306.h"
 
 #define LED_PIN (GPIO_NUM_2)
-#define HX711_MEASURMENTS_COUNT 120
+#define HX711_MEASURMENTS_COUNT 10
 
 #define I2C_MASTER_FREQ_HZ 400000U
 #define I2C_PORT_NUM I2C_NUM_0
@@ -36,18 +36,18 @@ static esp_err_t i2c_master_init()
     return i2c_driver_install(I2C_PORT_NUM, conf.mode, 0, 0, 0);
 }
 
-static esp_err_t i2c_master_write_slave(uint8_t address, const uint8_t *data_wr, size_t size)
-{
-    #define ACK_CHECK_EN 0x1 /*!< I2C master will check ack from slave*/
-    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-    i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, (address << 1) | I2C_MASTER_WRITE, ACK_CHECK_EN);
-    i2c_master_write(cmd, data_wr, size, ACK_CHECK_EN);
-    i2c_master_stop(cmd);
-    esp_err_t ret = i2c_master_cmd_begin(I2C_NUM_0, cmd, 1000);
-    i2c_cmd_link_delete(cmd);
-    return ret == ESP_OK;
-}
+// static esp_err_t i2c_master_write_slave(uint8_t address, const uint8_t *data_wr, size_t size)
+// {
+//     #define ACK_CHECK_EN 0x1 /*!< I2C master will check ack from slave*/
+//     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+//     i2c_master_start(cmd);
+//     i2c_master_write_byte(cmd, (address << 1) | I2C_MASTER_WRITE, ACK_CHECK_EN);
+//     i2c_master_write(cmd, data_wr, size, ACK_CHECK_EN);
+//     i2c_master_stop(cmd);
+//     esp_err_t ret = i2c_master_cmd_begin(I2C_NUM_0, cmd, 1000);
+//     i2c_cmd_link_delete(cmd);
+//     return ret == ESP_OK;
+// }
 
 static void ledBlinkTask(void *arg)
 {
@@ -63,6 +63,12 @@ static void ledBlinkTask(void *arg)
         vTaskDelay(995);
     }
 }
+
+static int compare(const void * a, const void * b)
+{
+   return (*(int32_t *)a - *(int32_t *)b);
+}
+
 
 static void weightTask(void *arg)
 {
@@ -88,35 +94,48 @@ static void weightTask(void *arg)
     };
 
     hx711Init(&handle);
-
-    esp_err_t err = i2c_master_init();
-    printf("i2c init satus == %d\n", err == ESP_OK ? 1 : 0);
-
-    bool status = SSD1306_Init();
-    printf("OLED INIT status == %d\n", status ? 1 : 0);
-
-    SSD1306_Puts("Hello!", &Font_7x10, SSD1306_COLOR_WHITE);
+    static uint32_t tare = 0;
+    static bool calibration = true;
+    static int32_t measurments[HX711_MEASURMENTS_COUNT];
+    printf("Calibration!\n");
+    SSD1306_GotoXY(0, 0);
+    SSD1306_Puts("Calibration! ", &Font_7x10, SSD1306_COLOR_WHITE);
     SSD1306_UpdateScreen();
-
+    
     for (;;) 
     {
-        static uint32_t index = 0;
-        static uint64_t mean = 0;
+        static uint32_t data = 0;
+        static uint32_t idx = 0;
+
         if (hx711GetStatus() == Hx711StatusReady) {
-            uint32_t data = 0;;
+            data = 0;
             if (hx711ReadChannel(Hx711ChannelA128, &data) == Hx711StatusOk) {
-                index++;
-                mean += data;
+                measurments[idx++] = data;
             }
-            if (index >= HX711_MEASURMENTS_COUNT) {
-                mean /= index;
-                printf("HX711 data == %lli\n", mean);
-                //SSD1306_Fill(SSD1306_COLOR_BLACK);
-                SSD1306_GotoXY(0, 0);
-                SSD1306_Printf(&Font_7x10, "%d", mean);
-                SSD1306_UpdateScreen();
-                index = 0;
+        }
+        
+        if (idx >= HX711_MEASURMENTS_COUNT) {
+            idx = 0;
+            if (calibration) {
+                qsort(measurments, HX711_MEASURMENTS_COUNT, sizeof(measurments[0]), compare);
+                tare = (measurments[4] + measurments[5] + measurments[6]) / 3; // median combined with mean
+                printf("Calibration Finished!\n");
+                printf("tare == %u\n", tare);
+                calibration = false;
             }
+            qsort(measurments, HX711_MEASURMENTS_COUNT, sizeof(measurments[0]), compare);
+            // for (uint32_t i = 0; i < HX711_MEASURMENTS_COUNT; i++) {
+            //     printf("m[%d] == %d ", i, measurments[i]);
+            // }
+            int32_t mean = (measurments[4] + measurments[5] + measurments[6]) / 3;
+            int32_t mass = 0;
+            if (tare - mean > 0) {
+                mass = (tare - mean) / 196;
+            }
+            printf("mass == %d gramms\n", mass);
+            SSD1306_GotoXY(0, 0);
+            SSD1306_Printf(&Font_7x10, "%ld", mass);
+            SSD1306_UpdateScreen();
         }
         vTaskDelay(12);
     }
@@ -139,6 +158,13 @@ void app_main()
 
     printf("%dMB %s flash\n", spi_flash_get_chip_size() / (1024 * 1024),
             (chip_info.features & CHIP_FEATURE_EMB_FLASH) ? "embedded" : "external");
+
+    esp_err_t err = i2c_master_init();
+    printf("i2c init satus == %d\n", err == ESP_OK ? 1 : 0);
+
+    bool status = SSD1306_Init();
+    printf("OLED INIT status == %d\n", status ? 1 : 0);
+    SSD1306_UpdateScreen();
 
     while(1) 
     {
