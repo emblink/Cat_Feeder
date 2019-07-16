@@ -29,7 +29,7 @@ Hx711Status hx711GetStatus(void)
     return handle->readCb(handle->dataPin) == false ? Hx711StatusReady : Hx711StatusBusy;
 }
 
-Hx711Status hx711ReadChannel(Hx711Channel channel, uint32_t *data)
+Hx711Status hx711ReadChannel(Hx711Channel channel, int32_t *data)
 {
     if (!inited)
         return Hx711StatusInitErr;
@@ -40,23 +40,24 @@ Hx711Status hx711ReadChannel(Hx711Channel channel, uint32_t *data)
 
     *data = 0;
     for (uint32_t i = 0; i < 24; i++) {
+        *data <<= 1;
     	handle->writeCb(handle->sclkPin, true);
         handle->delayCb(1);
         if (handle->readCb(handle->dataPin)) {
             (*data)++;
         }
-        *data <<= 1;
         handle->writeCb(handle->sclkPin, false);
         handle->delayCb(1);
     }
-    *data &= 0xFFFFFF;
 
     for (uint32_t i = 0; i < channel - 24; i++) {
         handle->writeCb(handle->sclkPin, true);
         handle->delayCb(1);
         handle->writeCb(handle->sclkPin, false);
+        handle->delayCb(1);
     }
-
+    
+    *data ^= 0x800000;
     return *data > 0 ? Hx711StatusOk : Hx711StatusPowerErr;
 }
 
