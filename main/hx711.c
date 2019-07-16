@@ -29,7 +29,7 @@ Hx711Status hx711GetStatus(void)
     return handle->readCb(handle->dataPin) == false ? Hx711StatusReady : Hx711StatusBusy;
 }
 
-Hx711Status hx711ReadChannel(Hx711Channel channel, uint32_t *data)
+Hx711Status hx711ReadChannel(Hx711Channel channel, int32_t *data)
 {
     if (!inited)
         return Hx711StatusInitErr;

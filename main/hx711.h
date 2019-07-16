@@ -21,8 +21,9 @@ typedef enum Hx711Channel {
     Hx711ChannelCount
 } Hx711Channel;
 
-typedef bool (*pinReadCallback)(uint32_t pin);
-typedef void (*pinWriteCallback)(uint32_t pin, bool state);
+/* These callbacks params can be changed according to used HAL */
+typedef int32_t (*pinReadCallback)(int32_t pin);
+typedef int32_t (*pinWriteCallback)(int32_t pin, uint32_t state);
 typedef void (*delayUsCb)(uint32_t us);
 
 typedef struct Hx711Handle {
@@ -35,7 +36,7 @@ typedef struct Hx711Handle {
 
 Hx711Status hx711Init(Hx711Handle *handle);
 Hx711Status hx711GetStatus(void);
-Hx711Status hx711ReadChannel(Hx711Channel channel, uint32_t *data);
+Hx711Status hx711ReadChannel(Hx711Channel channel, int32_t *data);
 Hx711Status hx711PowerDown(void);
 Hx711Status hx711PowerUp(void);
 #endif // __HX_711_H

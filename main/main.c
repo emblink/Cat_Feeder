@@ -94,8 +94,7 @@ static void weightTask(void *arg)
     };
 
     hx711Init(&handle);
-    static uint32_t tare = 0;
-    static bool calibration = true;
+    static int32_t tare = 0;
     static int32_t measurments[HX711_MEASURMENTS_COUNT];
     printf("Calibration!\n");
     SSD1306_GotoXY(0, 0);
@@ -104,7 +103,7 @@ static void weightTask(void *arg)
     
     for (;;) 
     {
-        static uint32_t data = 0;
+        static int32_t data = 0;
         static uint32_t idx = 0;
 
         if (hx711GetStatus() == Hx711StatusReady) {
@@ -115,6 +114,7 @@ static void weightTask(void *arg)
         }
         
         if (idx >= HX711_MEASURMENTS_COUNT) {
+            static bool calibration = true;
             idx = 0;
             if (calibration) {
                 qsort(measurments, HX711_MEASURMENTS_COUNT, sizeof(measurments[0]), compare);
@@ -128,9 +128,11 @@ static void weightTask(void *arg)
             //     printf("m[%d] == %d ", i, measurments[i]);
             // }
             int32_t mean = (measurments[4] + measurments[5] + measurments[6]) / 3;
+            printf("mean == %d\n", mean);
             int32_t mass = 0;
-            if (tare - mean > 0) {
-                mass = (tare - mean) / 196;
+            if (tare - mean < 0) {
+                mass = (tare - mean) / 22; // for 10kg sensor 200;
+                mass = -mass;
             }
             printf("mass == %d gramms\n", mass);
             SSD1306_GotoXY(0, 0);
